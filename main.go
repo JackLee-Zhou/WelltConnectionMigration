@@ -1,7 +1,11 @@
 package main
 
-import "myConnect/server"
+import (
+	"myConnect/server"
+	"myConnect/tlog"
+)
 
 func main() {
+	tlog.Init()
 	server.Init()
 }

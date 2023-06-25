@@ -14,6 +14,9 @@ func Init() {
 	r.Use(ginzap.RecoveryWithZap(tlog.Logger, true))
 
 	r.POST("/register-webhook", RegisterWebHookHandler)
+	r.GET("/", ConnectHandler)
+	r.POST("/subscribe", Sub)
 
+	// TODO 要启动 Https
 	r.Run(":8000")
 }

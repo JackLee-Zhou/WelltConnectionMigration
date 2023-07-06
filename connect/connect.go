@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"myConnect/tlog"
 	"myConnect/types"
@@ -23,11 +22,15 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	PubType      = "irn_publish"
-	BatchPubType = "irn_batchPublish" // 批量发布
-	SubType      = "irn_subscribe"
-	UnSubType    = "irn_unsubscribe"    // 取消订阅
-	BatchSubType = "irn_batchSubscribe" // 批量订阅
+	PubType        = "irn_publish"
+	BatchPubType   = "irn_batchPublish"   // 批量发布
+	SubType        = "irn_subscribe"      // 客户端订阅谋克 topic
+	SubPayLoad     = "irn_subscription"   // 服务器发送订阅到客户端
+	BatchSubType   = "irn_batchSubscribe" // 批量订阅
+	UnSubType      = "irn_unsubscribe"    // 取消订阅
+	BatchUnSub     = "irn_batchUnsubscribe"
+	FetchType      = "irn_fetchMessages" // 客户端主动拉取
+	BatchFetchType = "irn_batchFetchMessages"
 )
 
 type (
@@ -69,57 +72,16 @@ var wPool = &WPool{
 	//events: make(map[*websocket.Conn][]*Event),
 }
 
-func WebSocketHandler(c *gin.Context) {
-	if !c.IsWebsocket() {
-		c.String(400, "Bad Request")
-		return
-	}
-	// 协议升级 为 DApp 和 Wallet 建立链接
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		tlog.Errorf("websocket upgrade error: %s\n", err.Error())
-		return
-	}
-	tlog.Infof("success to peer connection: %s\n", conn.RemoteAddr())
-	go func(con *websocket.Conn) {
-		//	读取 conn 中的数据
-		for {
-			_, msgBt, err := con.ReadMessage()
-			if err != nil {
-				tlog.Errorf("websocket read client data error: %s\n", err.Error())
-				return
-			}
-			// 这里做版本判断
-			var msg types.PubSub
-			if err = json.Unmarshal(msgBt, &msg); err != nil {
-				tlog.Errorf("websocket unmarshal msg error: %s\n", err.Error())
-				break
-			}
-
-			switch msg.JsonRpc {
-			case "1.0":
-				v1Handler(&msg)
-			case "2.0":
-				v2Handler(&msg, conn)
-			default:
-				tlog.Errorf("websocket msg version is not exist! %s\n", msg.JsonRpc)
-			}
-
-		}
-	}(conn)
-}
-
-func v1Handler(msg *types.PubSub) {
+func V1Handler(msg *types.PubSub) {
 	switch msg.Method {
 	case PubType:
 	case SubType:
-		//wPool.pub()
 	default:
 		tlog.Errorf("websocket msg type is not exist! %s\n", msg.Method)
 	}
 }
 
-func v2Handler(msg *types.PubSub, con *websocket.Conn) {
+func V2Handler(msg *types.PubSub, con *websocket.Conn) {
 	switch msg.Method {
 	case PubType:
 		wPool.pub(con, &msg.Params)
@@ -127,7 +89,7 @@ func v2Handler(msg *types.PubSub, con *websocket.Conn) {
 		// Message 为 PublishedMessage[]
 		wPool.batchPub(con, msg.Params.Message)
 	case SubType:
-		subID := wPool.sub(msg.Params.Topic, msg.ID, msg.JsonRpc, con)
+		subID := wPool.sub(msg.Params.Topic, msg.ID, con)
 		res := &types.Res{
 			ID:      msg.ID,
 			JsonRpc: msg.JsonRpc,
@@ -144,10 +106,15 @@ func v2Handler(msg *types.PubSub, con *websocket.Conn) {
 			tlog.Errorf("websocket write message error: %s topic is %s ", err.Error(), msg.Params.Topic)
 			return
 		}
+	case SubPayLoad:
+		wPool.subPayload(msg, con)
 	case BatchSubType:
 		wPool.batchSub(msg.Params.Topic, msg.ID, msg.JsonRpc, con)
 	case UnSubType:
-		wPool.unSub(msg.Params.Topic, msg.Params.ID)
+		wPool.unSub(msg.Params.Topic, con)
+	case BatchUnSub:
+	case FetchType:
+	case BatchFetchType:
 	default:
 		tlog.Errorf("websocket msg type is not exist! %s\n", msg.Method)
 	}
@@ -237,7 +204,7 @@ func (w *WPool) batchSub(topics string, id, rpcVersion string, conn *websocket.C
 	subIDs := []string{}
 	for _, topic := range ts {
 		temp := topic
-		subId := w.sub(temp, id, rpcVersion, conn)
+		subId := w.sub(temp, id, conn)
 		subIDs = append(subIDs, subId)
 	}
 	bID, err := json.Marshal(subIDs)
@@ -259,7 +226,7 @@ func (w *WPool) batchSub(topics string, id, rpcVersion string, conn *websocket.C
 }
 
 // sub 注册监听
-func (w *WPool) sub(topic, id, rpcVersion string, conn *websocket.Conn) (subID string) {
+func (w *WPool) sub(topic, id string, conn *websocket.Conn) (subID string) {
 	w.Lock()
 	defer w.Unlock()
 	subID = toID(topic)
@@ -284,7 +251,19 @@ func (w *WPool) sub(topic, id, rpcVersion string, conn *websocket.Conn) (subID s
 }
 
 // unSub 取消监听
-func (w *WPool) unSub(topic, id string) {
+func (w *WPool) unSub(topic string, con *websocket.Conn) {
+	w.Lock()
+	defer w.Unlock()
+	if _, ok := w.nodes[con]; !ok {
+		tlog.Infof("websocket topic is not exist! %s\n", topic)
+		return
+	}
+	delete(w.nodes[con].subs, topic)
+	tlog.Infof("websocket topic unSub success! %s\n", topic)
+}
+
+// subPayload 订阅 server 发送 订阅到客户端
+func (w *WPool) subPayload(msg *types.PubSub, con *websocket.Conn) {
 
 }
 

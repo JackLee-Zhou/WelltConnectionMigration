@@ -1,0 +1,16 @@
+2023-06-25T18:15:03.578+0800	INFO	connect/connect.go:93	success to peer connection: 127.0.0.1:57431
+
+2023-06-25T18:15:03.586+0800	INFO	gin@v1.9.1/context.go:174	/	{"status": 200, "method": "GET", "path": "/", "query": "", "ip": "127.0.0.1", "user-agent": "", "latency": 0.0092213, "time": "2023-06-25T10:15:03Z"}
+2023-06-25T18:15:23.418+0800	INFO	connect/connect.go:288	websocket topic pub is not exist! jjfhajhfja
+
+2023-06-25T18:15:23.418+0800	INFO	connect/connect.go:146	sub res is &{ID:1 JsonRpc:2.0 Result:1ee601e9d464185ae05e95e3994732f59f733d956e58580101338ce44ef544b0} 
+
+2023-06-25T18:17:35.382+0800	INFO	connect/connect.go:93	success to peer connection: 127.0.0.1:57466
+
+2023-06-25T18:17:35.383+0800	INFO	gin@v1.9.1/context.go:174	/	{"status": 200, "method": "GET", "path": "/", "query": "", "ip": "127.0.0.1", "user-agent": "", "latency": 0.0005153, "time": "2023-06-25T10:17:35Z"}
+2023-06-25T18:17:57.941+0800	INFO	connect/connect.go:146	sub res is &{ID:1 JsonRpc:2.0 Result:a5f4f8663bed76db23a5a62884a2d3181eeb159048afe94f52abb75bc60ba7e7} 
+
+2023-06-25T18:21:20.577+0800	INFO	connect/connect.go:288	websocket topic pub is not exist! jjfhajgdfja
+
+2023-06-25T18:21:20.577+0800	INFO	connect/connect.go:146	sub res is &{ID:1 JsonRpc:2.0 Result:d46c9ddac381503d38e60ac92d135dbfcc665ca4d1e0e752ba1b5cfd5ad43b6b} 
+
